@@ -1,0 +1,12 @@
+#!/bin/sh
+
+sed -i 's/^\s*cache .*$//' /etc/snmp.conf
+# Don't start tinysnmpd there, it will respawned by init!
+killall tinysnmpd #&& /bin/tinysnmpd /etc/snmp.conf /lib/tinysnmp &
+
+# Switch two-channel device to one-channel mode (i.e. if you don't want to use
+# horizontal polarization)
+#ip link set ath0 down
+#iwpriv wifi0 txchainmask 1
+#iwpriv wifi0 rxchainmask 1
+#ip link set ath0 up

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style>
+	.mtd {
+		text-align:right;
+		font-family:monospace;
+	}
+</style>
+<script>
+
+function drawDisplay() {
+	window.ctx.strokeStyle = "white";
+	window.ctx.beginPath();
+	window.ctx.arc(200, 200, 180, 0, 2*Math.PI);
+	window.ctx.stroke();
+	window.ctx.beginPath();
+	window.ctx.arc(200, 200, 90, 0, 2*Math.PI);
+	window.ctx.stroke();
+	window.ctx.moveTo(20, 200);
+	window.ctx.lineTo(380, 200);
+	window.ctx.stroke();
+	window.ctx.moveTo(200, 20);
+	window.ctx.lineTo(200, 380);
+	window.ctx.stroke();
+
+	window.ctx.font = "18px Arial";
+	window.ctx.fillStyle = "white";
+	window.ctx.fillText("N", 195, 15);
+	window.ctx.fillText("W", 0, 205);
+	window.ctx.fillText("E", 385, 205);
+	window.ctx.fillText("S", 195, 400);
+
+
+	window.grad.addColorStop(0,"red");
+	window.grad.addColorStop(0.2,"orange");
+	window.grad.addColorStop(0.4,"yellow");
+	window.grad.addColorStop(0.6,"green");
+	window.grad.addColorStop(0.8,"blue");
+	window.grad.addColorStop(1, "purple");
+
+	drawBg();
+};
+
+function drawBg() {
+	window.ctx.fillStyle = "white";
+	window.ctx.fillRect(400, 0, 40, 400);
+};
+
+function loadConfig(){
+	var ts = new Date().getTime();
+	window.creq.open('GET', '/tracker/config?timestamp=' + ts, true);
+	window.creq.onreadystatechange = realLoadConfig;
+	window.creq.send();
+};
+
+function realLoadConfig() {
+	if ((window.creq.readyState == 4) && (window.creq.status == 200)) {
+		//window.dot.innerHTML = window.creq.responseText;
+		try {	
+			var response = window.creq.responseText;
+			//if (!response) { return; };
+			var res = JSON.parse(response);
+			for (var it in res) {
+				field = document.getElementById(it);
+				if (field) {
+					field.innerHTML = res[it];
+				} else {
+					for (var jt in res[it]) {
+						if (jt.charAt(0) == '_') {
+							continue;
+						};
+						field = document.getElementById(it + "_" + jt);
+						if (!field) {
+							continue;
+						};
+						field.value = res[it][jt];
+						//field.style.textAlign = "right";
+					};
+				};
+			};
+		} catch (err) { alert("Error reading configuration.") };
+	};
+};
+
+function updateStatus(){
+	var ts = new Date().getTime();
+	window.sreq.open('GET', '/tracker/state?timestamp=' + ts, true);
+	//sreq.setRequestHeader("If-Modified-Since", "Thu, 1 Jan 1970 00:00:00 GMT");
+	window.sreq.onreadystatechange = realUpdateStatus;
+	window.sreq.send();
+};
+  
+function realUpdateStatus(){
+	if (window.sreq.readyState == 4) {
+		if (window.sreq.status == 200) {
+			//dot.innerHTML = dot.innerHTML + '.';
+			//dot.innerHTML = sreq.responseText;
+			try {
+				var res = JSON.parse(window.sreq.responseText);
+				//txt.innerHTML = "Азимут " + res.az + " градусов, элевация " + res.el +
+				//	" градусов, сигнал " + res.sig + " dBm."
+				txt.innerHTML = "<b>Connection with server established</b>"
+				txt.style.color = "green"
+				for (it in res) {
+					field = document.getElementById(it);
+					if (!field) {
+						continue; 
+					};
+					var val = res[it]
+					if ((typeof(val) == "number") && window.formats.hasOwnProperty(it)) {
+						//val = val.toFixed(4);
+						val = window.formats[it](val)
+					};
+					field.innerHTML = val;
+					//field.style.textAlign = "right";
+					//field.style.fontFamily="monospace";
+				};
+				x = 200 + Math.round(2*(90 - res.el)*Math.cos((res.az - 90)*Math.PI/180));
+				y = 200 + Math.round(2*(90 - res.el)*Math.sin((res.az - 90)*Math.PI/180));
+				if ((old.x != x) || (old.y != y)){
+					if (bg.img) {
+						ctx.putImageData(window.bg.img, window.bg.x, window.bg.y);
+					}
+					window.bg.x = x - 4;
+					window.bg.y = y - 4;
+					window.bg.img = ctx.getImageData(window.bg.x, window.bg.y, 8, 8);
+					window.ctx.fillStyle = "lime";
+					window.ctx.beginPath();
+					window.ctx.arc(x, y, 4, 0, 2*Math.PI);
+					window.ctx.fill();
+					window.old.x = x;
+					window.old.y = y;
+				}
+				sig = Math.round((res.sig + 100)*4);
+				if (old.sig != sig) {
+					//ctx.putImageData(bg2.img, bg2.x, bg2.y);
+					drawBg();
+					window.ctx.fillStyle = window.grad;
+					window.ctx.fillRect(405, 400, 30, -sig); 
+					window.old.sig = sig;
+				}
+			} catch (err) { 
+				window.txt.innerHTML = "<b>Incorrect data from server</b>"
+				txt.style.color = "red"
+			};
+		} else if (window.sreq.status == 502) {
+			window.txt.innerHTML = "<b>Server does not responding</b>"
+			txt.style.color = "red"
+		};
+		window.setTimeout(updateStatus, 1000);
+	}
+}
+
+function init() {
+	// Глобальные переменные
+	window.ctx = document.getElementById("myCanvas").getContext("2d");
+	window.grad = window.ctx.createLinearGradient(0, 390, 0, 0);
+	window.creq = new XMLHttpRequest();
+	window.sreq = new XMLHttpRequest();
+	window.txt = document.getElementById("text");
+	window.dot = document.getElementById("dots");
+	window.bg = {img: null, x: 0, y: 0};
+	window.old = {x: 0, y: 0, sig: 0};
+	window.formats = {lat: function (x) { return x.toFixed(5).toString(); },
+			lon: function (x) { return x.toFixed(5).toString(); },
+			alt: function (x) { return (x/1000).toFixed(3) + "&nbsp;&nbsp;"; },
+			az: function (x) { return x.toFixed(2) + "&nbsp;&nbsp;&nbsp;"; },
+			el: function (x) { return x.toFixed(2) + "&nbsp;&nbsp;&nbsp;"; },
+			az_fix: function (x) { return x.toFixed(2) + "&nbsp;&nbsp;&nbsp;"; },
+			el_fix: function (x) { return x.toFixed(2) + "&nbsp;&nbsp;&nbsp;"; },
+			dist: function (x) { return (x/1000).toFixed(3) + "&nbsp;&nbsp;"; },
+			sig: function (x) { return x.toFixed(0) + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"; }}
+	drawDisplay();
+	loadConfig();
+	updateStatus();
+};
+</script> 
+
+</head>
+<body onload="init()">
+
+<center>	
+<table><tr style="vertical-align:top">
+<!--<td>
+</td>-->
+<td>
+<center>
+<!--<div style="position:relative;top:10px;left:10px"> -->
+<canvas id="myCanvas" width="440" height="400" style="border:0px solid #FF0000;background-color:#000000">
+Your browser does not support the HTML5 canvas tag.</canvas>
+<!--<p id="text">Инициализация...<p>-->
+<!--<p id="dots"><p>-->
+</div>
+</center>
+</td>
+<td>
+<table>
+<tr><td align="center" colspan="3"><b>Target parameters</b></td></tr>
+<tr><td>Latitude</td><td id="lat" class="mtd">0.00000</td><td>&#176;</td></tr>
+<tr><td>Longitude</td><td id="lon" class="mtd">0.00000</td><td>&#176;</td></tr>
+<tr><td>Altitude</td><td id="alt" class="mtd">0.000&nbsp;&nbsp;</td><td>km</td></tr>
+<tr><td>Azimuth</td><td id="az" class="mtd">0.00&nbsp;&nbsp;&nbsp;</td><td>&#176;</td></tr>
+<tr><td>Elevation</td><td id="el" class="mtd">0.00&nbsp;&nbsp;&nbsp;</td><td>&#176;</td></tr>
+<tr><td>Rotator azimuth</td><td id="az_fix" class="mtd">0.00&nbsp;&nbsp;&nbsp;</td><td>&#176;</td></tr>
+<tr><td>Rotator elevation</td><td id="el_fix" class="mtd">0.00&nbsp;&nbsp;&nbsp;</td><td>&#176;</td></tr>
+<tr><td>Distance</td><td id="dist" class="mtd">0.000&nbsp;&nbsp;</td><td>km</td></tr>
+<tr><td>Signal level</td><td id="sig" class="mtd">0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td><td>dBm</td></tr>
+<tr><td align="center" colspan="3" id="text"></td></tr>
+</table>
+</td>
+</tr>
+</table>
+<p>
+<table>
+<tr><td align="center" colspan="6"><b>Ground station parameters</b></td></tr>
+<tr><td>Latitude</td><td><input type="text" id="GPS_Lat"></td><td style="width:3em">&#176;</td>
+    <td>Log file name</td><td><input type="text" id="Log_File"></td></tr>
+<tr><td>Longitude</td><td><input type="text" id="GPS_Lon"></td><td>&#176;</td>
+    <td>Log period</td><td><input type="text" id="Log_Period"></td><td>sec</td></tr>
+<tr><td>Altitude</td><td><input type="text" id="GPS_Alt"></td><td>m</td>
+    <td>Rotator control port</td><td><input type="text" id="Radant_Dev"></td></tr>
+<tr><td>Base azimuth</td><td><input type="text" id="Radant_MainAZ"></td><td>&#176;</td>
+    <td>Rotator timeout</td><td><input type="text" id="Radant_Timeout"></td><td>sec</td></tr>
+<tr><td>Magnetic azimuth</td><td><input type="text" id="Heading_Head"></td><td>&#176;</td>
+    <td>IP address for telemetry</td><td><input type="text" id="Net_Addr"></td></tr>
+<tr><td>Magnetic declination</td><td><input type="text" id="Heading_Decline"></td><td>&#176;</td>
+    <td>UDP port for telemetry</td><td ><input type="text" id="Net_Port"></td></tr>
+<tr><td>Static azimuth error</td><td><input type="text" id="Heading_StaticError"></td><td>&#176;</td></tr>
+<tr><td>True base azimuth</td><td><input type="text" id="Heading_TrueHead"></td><td>&#176;</td></tr>
+<tr><td>IP address for signal level</td><td><input type="text" id="SNMP_Host"></td></tr>
+<tr><td>OID for signal level</td><td><input type="text" id="SNMP_OID"></td></tr>
+<tr><td>Signal samples per point</td><td><input type="text" id="SNMP_NProbes"></td></tr>
+</table>
+</center>
+
+
+</body>
+</html>
